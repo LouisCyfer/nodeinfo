@@ -14,23 +14,23 @@ minetest.register_on_joinplayer(function(player)
 
 	player_identifier_table[name].clockbackground = player:hud_add({
 		hud_elem_type = "image",
-		position = {x=0.978,y=0.004},
+		position = {x=0.96,y=0.004},
 		size = "",
 		text = "bg.png",
 		number = 20,
-		alignment = {x=0,y=1},
+		alignment = {x=1,y=1},
 		offset = {x=0, y=0},
-		scale = {x=4,y=1.2 + border_size}
+		scale = {x=4.5,y=1.2 + border_size}
 	})
 
 	player_identifier_table[name].clocktext = player:hud_add({
 		hud_elem_type = "text",
-		position = {x=0.978,y=0.0075},
+		position = {x=0.961,y=0.0075},
 		size = "",
 		text = "0:00:00",
 		number = 0xFFFFFF,
-		alignment = {x=0,y=0},
-		offset = {x=1, y=0}
+		alignment = {x=1,y=1},
+		offset = {x=0, y=0}
 	})
 
 	player_identifier_table[name].hudbackground = player:hud_add({
