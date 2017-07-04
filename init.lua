@@ -129,14 +129,18 @@ minetest.register_globalstep(function(dtime)
 				if node.name ~= oldnode then
 					player_identifier_table[pName].name = node.name
 					setImg = clearImg
+					tiles = minetest.registered_items[node.name].inventory_image
 
-					if minetest.registered_nodes[node.name].tiles[1] and type(minetest.registered_nodes[node.name].tiles[1]) == "string" then
-						setImg = minetest.registered_nodes[node.name].tiles[1]
-
-						if minetest.registered_items[node.name].inventory_image then
-							setImg = minetest.registered_items[node.name].tiles[1]
+					if string.len(tiles) > 0 then
+						setImg = tiles
+					else
+						tiles = minetest.registered_nodes[node.name].tiles
+						if tiles ~= nil and type(tiles[1]) == "string" then
+							setImg = minetest.registered_nodes[node.name].tiles[1]
 						end
 					end
+
+					-- player:hud_change(player_identifier_table[pName].huddebug, "text", "DEBUG:\n")
 
 					player:hud_change(player_identifier_table[pName].hudimage, "text", setImg)
 
