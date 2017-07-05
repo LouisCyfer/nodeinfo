@@ -1,6 +1,8 @@
 player_identifier_table = {}
-local border_size = 0.2
 local clearImg = "bg.png"
+local cornerPos = {x=0.78,y=0.85}
+local linesize = 18
+local useDebug = false
 
 --[[
 -- possibly necessary for future updates
@@ -26,53 +28,84 @@ minetest.register_on_joinplayer(function(player)
 	end
 
 	player_identifier_table[name].name = "air"
---[[
-	player_identifier_table[name].huddebug = player:hud_add({
-		hud_elem_type = "text",
-		position = {x=0,y=0},
-		size = "",
-		text = "DEBUG:",
-		number = 0x00FF00,
-		alignment = {x=1,y=1},
-		offset = {x=0, y=0}
-	})
---]]
-	player_identifier_table[name].hudbackground = player:hud_add({
+
+	if useDebug == true then
+		player_identifier_table[name].huddebug = player:hud_add({
+			hud_elem_type = "text",
+			position = {x=0,y=0},
+			size = "",
+			text = "DEBUG:",
+			number = 0x00FF00,
+			alignment = {x=1,y=1},
+			offset = {x=0, y=0}
+		})
+	end
+
+	player_identifier_table[name].hud_bg = player:hud_add({
 		hud_elem_type = "image",
-		position = {x=0.65,y=0.92},
+		position = cornerPos,
 		size = "",
 		text = "bg.png",
 		number = 20,
 		alignment = {x=1,y=1},
 		offset = {x=0, y=0},
-		scale = {x=40.5,y=4.8 + border_size}
+		scale = {x=40,y=20}
 	})
 
-	player_identifier_table[name].hudtitle = player:hud_add({
+	player_identifier_table[name].hud_image = player:hud_add({
+		hud_elem_type = "statbar",
+		position = cornerPos,
+		size = {x=50,y=50},
+		text = "bg.png",
+		number = 2,
+		offset = {x=linesize, y=25}
+	})
+
+	player_identifier_table[name].hud_titlebar = player:hud_add({
 		hud_elem_type = "text",
-		position = {x=0.655,y=0.927},
+		position = cornerPos,
 		size = "",
 		text = "Block-Info:",
 		number = 0x00FF00,
 		alignment = {x=1,y=1},
-		offset = {x=0, y=0}
+		offset = {x=5, y=0}
 	})
 
-	player_identifier_table[name].hudimage = player:hud_add({
-		hud_elem_type = "image",
-		position = {x=0.66,y=0.95},
+	player_identifier_table[name].hud_title = player:hud_add({
+		hud_elem_type = "text",
+		position = cornerPos,
 		size = "",
-		text = "bg.png",
-		number = 20,
+		text = "air",
+		number = 0xFFFFFF,
 		alignment = {x=1,y=1},
-		scale = {x=2.5,y=2.5}
+		offset = {x=82, y=0}
+	})
+
+	player_identifier_table[name].hud_modinfo = player:hud_add({
+		hud_elem_type = "text",
+		position = cornerPos,
+		size = "",
+		text = " ",
+		number = 0xFFFFFF,
+		alignment = {x=1,y=1},
+		offset = {x=82, y=linesize*2}
+	})
+
+	player_identifier_table[name].hud_description = player:hud_add({
+		hud_elem_type = "text",
+		position = cornerPos,
+		size = "",
+		text = " ",
+		number = 0xFFFFFF,
+		alignment = {x=1,y=1},
+		offset = {x=5, y=linesize*5}
 	})
 
 	player_identifier_table[name].hudtext = player:hud_add({
 		hud_elem_type = "text",
 		position = {x=0.72,y=0.927},
 		size = "",
-		text = "",
+		text = " ",
 		number = 0xFFFFFF,
 		alignment = {x=1,y=1},
 		offset = {x=0, y=0}
@@ -80,11 +113,11 @@ minetest.register_on_joinplayer(function(player)
 
 	player_identifier_table[name].clocktext = player:hud_add({
 		hud_elem_type = "text",
-		position = {x=0.962,y=0.977},
+		position = {x=0.993,y=0.993},
 		size = "",
 		text = "0:00:00",
 		number = 0xFFFFFF,
-		alignment = {x=1,y=1},
+		alignment = {x=-1,y=-1},
 		offset = {x=0, y=0}
 	})
 end)
@@ -125,6 +158,9 @@ minetest.register_globalstep(function(dtime)
 			newdir.z = (newlook.z) + pos.z
 			
 			local node = minetest.get_node({x=newdir.x,y=newdir.y,z=newdir.z})
+			local meta = minetest.get_meta({x=newdir.x,y=newdir.y,z=newdir.z})
+			local metaTable = meta:to_table()
+
 			if node.name ~= "air" and node.name ~= "ignore" then
 				if node.name ~= oldnode then
 					player_identifier_table[pName].name = node.name
@@ -140,9 +176,20 @@ minetest.register_globalstep(function(dtime)
 						end
 					end
 
-					-- player:hud_change(player_identifier_table[pName].huddebug, "text", "DEBUG:\n")
+					local reciepesTable = minetest.get_all_craft_recipes(node.name)
+					local dbg = "n/a"
+					local recAmount = 0
 
-					player:hud_change(player_identifier_table[pName].hudimage, "text", setImg)
+					if reciepesTable ~= nil then
+						recAmount = #reciepesTable
+						-- dbg = "len=" .. tostring(recAmount) .. "\n" .. dump(reciepesTable)
+						
+					end
+
+					-- dbg = dump(metaTable)
+					-- player:hud_change(player_identifier_table[pName].huddebug, "text", "DEBUG:\n" .. dbg)
+
+					player:hud_change(player_identifier_table[pName].hud_image, "text", setImg)
 
 					local getStr = minetest.registered_nodes[node.name].description
 					text_title = getStr
@@ -167,24 +214,60 @@ minetest.register_globalstep(function(dtime)
 
 					local splitIndex = 0
 
-					if string.len(text_description) > 60 then
-						splitIndex = string.find(text_description, " ", 60)
-						text_description = string.sub(text_description, 0, splitIndex) .. "\n" .. string.sub(text_description, splitIndex + 1)
+					local maxLineLen = 50
+					local strLen = string.len(text_description)
+					local maxLines = math.ceil(string.len(text_description)/maxLineLen)
+
+					dbg = "strLen=" .. tostring(strLen) .. " | " .. tostring(maxLines)
+
+					local thisline = ""
+					local cuttedStr = text_description
+					text_description = ""
+
+					for lineCount = 1, maxLines do
+						splitIndex = string.find(cuttedStr, " ", maxLineLen - 5, maxLineLen)
+						thisline = string.sub(cuttedStr, 0, splitIndex)
+
+						if useDebug == true then
+							dbg = dbg .. "\n\nlineCount=" .. tostring(lineCount) .. " | splitIndex=" .. tostring(splitIndex) .. " | thisline=" .. thisline
+						end
+
+						if lineCount < maxLines then
+							thisline = thisline .. "\n"
+							cuttedStr = string.sub(cuttedStr, splitIndex + 1)
+						end
+
+						text_description = text_description .. thisline
 					end
 
-					text_title = text_title .. " (" .. node.name .. ") | Mod: " .. minetest.registered_nodes[node.name].mod_origin .. "\n\n"
-					player:hud_change(player_identifier_table[pName].hudtext, "text", text_title .. text_description)
+					
+
+					-- if string.len(text_description) > 45 then
+						-- splitIndex = string.find(text_description, " ", 45)
+						-- text_description = string.sub(text_description, 0, splitIndex) .. "\n" .. string.sub(text_description, splitIndex + 1)
+					-- end
+
+					text_title = text_title .. " | Reciepes: " .. tostring(recAmount)
+					player:hud_change(player_identifier_table[pName].hud_title, "text", text_title)
+					player:hud_change(player_identifier_table[pName].hud_description, "text", text_description)
+					player:hud_change(player_identifier_table[pName].hud_modinfo, "text", "Mod: " .. minetest.registered_nodes[node.name].mod_origin .. "\n --> " .. node.name)
+
+					if useDebug == true then
+						player:hud_change(player_identifier_table[pName].huddebug, "text", "DEBUG:\n" .. dbg)
+					end
 				end
 				return
 			end
+
+			local entity
 		end
 		if player_identifier_table[pName].name ~= "air" then
-			player:hud_change(player_identifier_table[pName].hudimage, "text", clearImg)
+			player:hud_change(player_identifier_table[pName].hud_image, "text", clearImg)
 
-			local node = "air"
-
-			player_identifier_table[pName].name = node
-			player:hud_change(player_identifier_table[pName].hudtext, "text", node)
+			player_identifier_table[pName].name = "air"
+			player:hud_change(player_identifier_table[pName].hud_title, "text", "air")
+			player:hud_change(player_identifier_table[pName].hud_description, "text", " ")
+			player:hud_change(player_identifier_table[pName].hud_modinfo, "text", " ")
 		end
 	end
 end)
