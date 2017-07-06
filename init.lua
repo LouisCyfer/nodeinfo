@@ -1,3 +1,5 @@
+local modStr = "nodeinfo v0.4.2"
+
 player_identifier_table = {}
 local clearImg = "bg.png"
 local cornerPos = {x=0.78,y=0.85}
@@ -58,6 +60,26 @@ function getTimeString()
 	end
 	timestring = timestring..meridiem
 	return timestring
+end
+
+function fillImage(nodeName)
+
+	if minetest.registered_items[nodeName] == nil then
+		return clearImg
+	end
+
+	local tiles = minetest.registered_items[nodeName].inventory_image
+
+	if string.len(tiles) > 0 then
+		return tiles
+	else
+		tiles = minetest.registered_nodes[nodeName].tiles
+		if tiles ~= nil and type(tiles[1]) == "string" then
+			return minetest.registered_nodes[nodeName].tiles[1]
+		else
+			return clearImg
+		end
+	end
 end
 
 minetest.register_on_joinplayer(function(player)
@@ -210,8 +232,11 @@ minetest.register_globalstep(function(dtime)
 		pos.y = pos.y + 1.5
 
 		local nodeInfos = ""
+		local entityInfos = ""
 
-		-- get closest node that is not air/water
+		local foundEntity = {found=false, isPlayer=false, name=nil}
+
+		-- get closest node/entity that is not air/water
 		for i = 1, 4 do
 			newlook.x = look.x*i
 			newlook.y = look.y*i
@@ -222,48 +247,65 @@ minetest.register_globalstep(function(dtime)
 			newdir.z = (newlook.z) + pos.z
 			
 			node = minetest.get_node(newdir)
-			nodeInfos = nodeInfos .. tostring(i) .. "=" .. node.name .. "\n"
+			local entList = minetest.get_objects_inside_radius(newdir, 0.5)
+			foundEntity = {found = false, isPlayer = false, name = nil, hp = 0, amount = 1}
+			
+			local _,object
+			for _,object in ipairs(entList) do
+				foundEntity.isPlayer = object:is_player()
+				foundEntity.hp = object:get_hp()
+				foundEntity.found = true
 
-			if node.name ~= "air" and node.name ~= "ignore" then
-				if node.name == "default:water_source" or node.name == "default:water_flowing" then
-					if i == 2 then
+				if object:is_player() then
+					foundEntity.name = object:get_player_name()
+					break
+				elseif object:get_luaentity() and object:get_luaentity().name == "__builtin:item" then
+					local entStr = string.split(object:get_luaentity().itemstring, " ")
+					foundEntity.name = entStr[1]
+					
+					if #entStr > 1 then
+						foundEntity.amount = entStr[2]
+					end
+					break
+				end
+			end
+
+			nodeInfos = nodeInfos .. tostring(i) .. "=" .. node.name .. "\n"
+			entityInfos = entityInfos .. tostring(i) .. "\nfoundEntity:\n" .. dump(foundEntity) .. "\n---\n"
+
+			if foundEntity.found == true then
+				setNodeName = foundEntity.name
+				break
+			else
+				if node.name ~= "air" and node.name ~= "ignore" then
+					if node.name == "default:water_source" or node.name == "default:water_flowing" then
+						if i == 2 then
+							break
+						end
+					else
 						break
 					end
-				else
-					break
 				end
 			end
 		end
 
-		if node ~= nil then
+		if node ~= nil and foundEntity.found == false then
 			setNodeName = node.name
 		end
 
-		dbg = "nodeInfos=\n" .. dump(nodeInfos) .. "\n\nsetNodeName=" .. setNodeName .. "\nnode.name=" .. node.name .. "\noldnode=" .. oldnode .. "\n\n"
-
-		if node ~= nil and setNodeName ~= "air" and node.name ~= "ignore" then
+		if node ~= nil and setNodeName ~= nil and setNodeName ~= "air" and node.name ~= "ignore" then
 
 			setImg = player:hud_get(player_identifier_table[pName].hud_image)["text"]
 			text_title = player:hud_get(player_identifier_table[pName].hud_title)["text"]
 			text_modInfo = player:hud_get(player_identifier_table[pName].hud_modinfo)["text"]
 			text_description = player:hud_get(player_identifier_table[pName].hud_description)["text"]
 
-			if node.name ~= oldnode then
-				player_identifier_table[pName].name = node.name
+			if setNodeName ~= oldnode then
+				player_identifier_table[pName].name = setNodeName
 
-				setImg = clearImg
-				tiles = minetest.registered_items[node.name].inventory_image
+				setImg = fillImage(setNodeName)
 
-				if string.len(tiles) > 0 then
-					setImg = tiles
-				else
-					tiles = minetest.registered_nodes[node.name].tiles
-					if tiles ~= nil and type(tiles[1]) == "string" then
-						setImg = minetest.registered_nodes[node.name].tiles[1]
-					end
-				end
-
-				local reciepesTable = minetest.get_all_craft_recipes(node.name)
+				local reciepesTable = minetest.get_all_craft_recipes(setNodeName)
 				local recAmount = 0
 
 				if reciepesTable ~= nil then
@@ -272,7 +314,12 @@ minetest.register_globalstep(function(dtime)
 
 				player:hud_change(player_identifier_table[pName].hud_image, "text", setImg)
 
-				local getStr = minetest.registered_nodes[node.name].description
+				local getStr = setNodeName
+
+				if minetest.registered_items[setNodeName] ~= nil then
+					getStr = minetest.registered_items[setNodeName].description
+				end
+
 				text_title = getStr
 
 				local checkStr = " - "
@@ -298,8 +345,6 @@ minetest.register_globalstep(function(dtime)
 				local strLen = string.len(text_description)
 				local maxLines = math.ceil(string.len(text_description)/maxLineLen)
 
-				dbg = dbg .. "strLen=" .. tostring(strLen) .. " | " .. tostring(maxLines)
-
 				local thisline = ""
 				local cuttedStr = text_description
 				text_description = ""
@@ -320,12 +365,20 @@ minetest.register_globalstep(function(dtime)
 					text_description = text_description .. thisline
 				end
 
+				if foundEntity.found == true then
+					text_title = text_title .. " x" .. tostring(foundEntity.amount)
+				end
+
 				text_title = text_title .. " | Reciepes: " .. tostring(recAmount)
-				text_modInfo = "Mod: " .. minetest.registered_nodes[node.name].mod_origin .. "\n --> " .. node.name
 			end
 		end
+				
+		dbg = "setNodeName=" .. dump(setNodeName) .. "\n" .. dump(minetest.registered_items[setNodeName])
 
-		-- local entity
+		if minetest.registered_items[setNodeName] ~= nil and setNodeName ~= "air" then
+			setMod = minetest.registered_items[setNodeName].mod_origin
+			text_modInfo = "Mod: " .. dump(setMod) .. "\n --> " .. dump(setNodeName)
+		end
 
 		player_identifier_table[pName].name = setNodeName
 
@@ -339,3 +392,5 @@ minetest.register_globalstep(function(dtime)
 		end
 	end
 end)
+
+minetest.log("action", "[Mod] " .. modStr .. " loaded")
