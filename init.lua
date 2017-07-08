@@ -1,4 +1,4 @@
-local modStr = "nodeinfo v0.4.2"
+local version = minetest.get_current_modname() .. " v0.5"
 
 player_identifier_table = {}
 local clearImg = "bg.png"
@@ -60,6 +60,36 @@ function getTimeString()
 	end
 	timestring = timestring..meridiem
 	return timestring
+end
+
+function splittedString(inputStr, maxLineLen)
+
+	local reString = ""
+
+	if inputStr == nil or type(inputStr) ~= "string" then
+		return "n/a"
+	end
+
+	local splitIndex = 0
+	local strLen = string.len(inputStr)
+	local maxLines = math.ceil(string.len(inputStr)/maxLineLen)	
+	local thisline = ""
+	
+	for lineCount = 1, maxLines do
+
+		if lineCount == maxLines then
+			thisline = inputStr
+		else
+			splitIndex = string.find(inputStr, " ", maxLineLen - 5, maxLineLen)
+	
+			thisline = string.sub(inputStr, 0, splitIndex)
+			thisline = thisline .. "\n"
+			inputStr = string.sub(inputStr, splitIndex + 1)
+		end
+
+		reString = reString .. thisline
+	end
+	return reString
 end
 
 function fillImage(nodeName)
@@ -248,7 +278,17 @@ minetest.register_globalstep(function(dtime)
 			
 			node = minetest.get_node(newdir)
 			local entList = minetest.get_objects_inside_radius(newdir, 0.5)
-			foundEntity = {found = false, isPlayer = false, name = nil, hp = 0, amount = 1}
+			foundEntity = {
+				found = false,
+				isPlayer = false,
+				isMob = false,
+				name = nil,
+				amount = 1,
+				hp = 0,
+				health = 0,
+				follow = {"n/a"},
+				tamed = false
+			}
 			
 			local _,object
 			for _,object in ipairs(entList) do
@@ -259,14 +299,32 @@ minetest.register_globalstep(function(dtime)
 				if object:is_player() then
 					foundEntity.name = object:get_player_name()
 					break
-				elseif object:get_luaentity() and object:get_luaentity().name == "__builtin:item" then
-					local entStr = string.split(object:get_luaentity().itemstring, " ")
-					foundEntity.name = entStr[1]
+				else
+					if object:get_luaentity() then
+						local ent = object:get_luaentity()
+						if ent.name == "__builtin:item" then
+							local entStr = string.split(ent.itemstring, " ")
+							foundEntity.name = entStr[1]
 					
-					if #entStr > 1 then
-						foundEntity.amount = entStr[2]
+							if #entStr > 1 then
+								foundEntity.amount = entStr[2]
+							end
+							break
+						else
+							foundEntity.isMob = true
+							foundEntity.name = ent.name
+							if ent.follow then
+								foundEntity.follow = ent.follow
+							end
+							if ent.tamed then
+								foundEntity.tamed = ent.tamed
+							end
+							if ent.health then
+								foundEntity.health = ent.health
+							end
+							break
+						end
 					end
-					break
 				end
 			end
 
@@ -321,6 +379,7 @@ minetest.register_globalstep(function(dtime)
 				end
 
 				text_title = getStr
+				text_description = " "
 
 				local checkStr = " - "
 
@@ -336,48 +395,33 @@ minetest.register_globalstep(function(dtime)
 					text_description = string.split(getStr, checkStr)[2]
 				end
 
-				if text_description == nil then
-					text_description = " "
-				end
-
-				local splitIndex = 0
-				local maxLineLen = 50
-				local strLen = string.len(text_description)
-				local maxLines = math.ceil(string.len(text_description)/maxLineLen)
-
-				local thisline = ""
-				local cuttedStr = text_description
-				text_description = ""
-
-				for lineCount = 1, maxLines do
-					splitIndex = string.find(cuttedStr, " ", maxLineLen - 5, maxLineLen)
-					thisline = string.sub(cuttedStr, 0, splitIndex)
-
-					if useDebug == true then
-						dbg = dbg .. "\n\nlineCount=" .. tostring(lineCount) .. " | splitIndex=" .. tostring(splitIndex) .. " | thisline=" .. thisline
-					end
-
-					if lineCount < maxLines then
-						thisline = thisline .. "\n"
-						cuttedStr = string.sub(cuttedStr, splitIndex + 1)
-					end
-
-					text_description = text_description .. thisline
-				end
+				text_description = splittedString(text_description, 50)
 
 				if foundEntity.found == true then
 					text_title = text_title .. " x" .. tostring(foundEntity.amount)
+
+					if foundEntity.isMob == true then
+						text_description = "HP: " .. tostring(foundEntity.health) .. "/" .. tostring(foundEntity.hp) .. " | "
+						text_description = text_description .. "tamed: " .. tostring(foundEntity.tamed) .. "\n"
+
+						local followStr= ""
+						if type(foundEntity.follow) == "string" then
+							followStr = foundEntity.follow
+						else
+							followStr = table.concat(foundEntity.follow, ", ")
+						end
+
+						text_description = text_description .. "follow: " .. splittedString(followStr, 50)
+					end
 				end
 
 				text_title = text_title .. " | Reciepes: " .. tostring(recAmount)
 			end
 		end
-				
-		dbg = "setNodeName=" .. dump(setNodeName) .. "\n" .. dump(minetest.registered_items[setNodeName])
 
 		if minetest.registered_items[setNodeName] ~= nil and setNodeName ~= "air" then
 			setMod = minetest.registered_items[setNodeName].mod_origin
-			text_modInfo = "Mod: " .. dump(setMod) .. "\n --> " .. dump(setNodeName)
+			text_modInfo = "Mod: " .. setMod .. "\n --> " .. setNodeName
 		end
 
 		player_identifier_table[pName].name = setNodeName
@@ -393,4 +437,6 @@ minetest.register_globalstep(function(dtime)
 	end
 end)
 
-minetest.log("action", "[Mod] " .. modStr .. " loaded")
+if minetest.settings:get("log_mods") then
+	minetest.log("action", "[Mod] " .. versionStr .. " loaded")
+end
