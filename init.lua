@@ -1,30 +1,30 @@
-local version = minetest.get_current_modname() .. " v0.5"
+local version = minetest.get_current_modname() .. " v0.6"
 
 player_identifier_table = {}
 local clearImg = "bg.png"
-local cornerPos = {x=0.78,y=0.85}
+local cornerPos = {x=0.77,y=0.825}
 local linesize = 18
 local timer = 0
 local cTime = "00:00:00"
 local useDebug = false
 
---[[
--- possibly necessary for future updates
-
-local basic_machines_found = false
+local foundMods = {
+	basic_machines = false,
+	pipeworks = false,
+	drawers = false,
+	mobs = false
+}
 
 function applyModSupport()
 	for i, name in ipairs(minetest.get_modnames()) do
-		if name == "basic_machines" then
-			basic_machines_found = true
+		if name == "basic_machines" then foundMods.basic_machines = true
+		elseif name == "pipeworks" then foundMods.pipeworks = true
+		elseif name == "drawers" then foundMods.drawers = true
+		elseif name == "mobs" then foundMods.mobs = true
 		end
 	end
 end
 applyModSupport()
---]]
-
---clock
--- minetest.register_globalstep(function(dtime)
 
 function getTimeString()
 	local timeofday
@@ -62,9 +62,10 @@ function getTimeString()
 	return timestring
 end
 
-function splittedString(inputStr, maxLineLen)
+function splittedString(inputStr)
 
 	local reString = ""
+	local maxLineLen = 55
 
 	if inputStr == nil or type(inputStr) ~= "string" then
 		return "n/a"
@@ -80,7 +81,10 @@ function splittedString(inputStr, maxLineLen)
 		if lineCount == maxLines then
 			thisline = inputStr
 		else
-			splitIndex = string.find(inputStr, " ", maxLineLen - 5, maxLineLen)
+			local tmpIndex = string.find(string.reverse(string.sub(inputStr, 0, maxLineLen)), " ")
+			-- dbg = "tmpIndex=" .. tostring(tmpIndex)
+
+			splitIndex = string.find(inputStr, " ", maxLineLen - tmpIndex, maxLineLen)
 	
 			thisline = string.sub(inputStr, 0, splitIndex)
 			thisline = thisline .. "\n"
@@ -100,15 +104,68 @@ function fillImage(nodeName)
 
 	local tiles = minetest.registered_items[nodeName].inventory_image
 
-	if string.len(tiles) > 0 then
-		return tiles
-	else
-		tiles = minetest.registered_nodes[nodeName].tiles
-		if tiles ~= nil and type(tiles[1]) == "string" then
-			return minetest.registered_nodes[nodeName].tiles[1]
+	if type(tiles) == "string" then
+		if string.len(tiles) > 0 then
+			return tiles
 		else
-			return clearImg
+			if minetest.registered_nodes[nodeName].tiles then
+				tiles = minetest.registered_nodes[nodeName].tiles
+				-- minetest.log("action", "DEBUG: " .. dump(tiles))
+
+				local maxTiles = #tiles
+
+				local cubeTiles = {
+					tile1 = clearImg,
+					tile2 = clearImg,
+					tile3 = clearImg
+				}
+
+				if type(tiles[maxTiles]) == "table" then
+					if minetest.registered_nodes[nodeName].tiles[1].name then
+						local justTile = minetest.registered_nodes[nodeName].tiles[1].name
+						tiles = { justTile }
+						cubeTiles.tile2 = justTile
+						cubeTiles.tile3 = justTile
+					end
+
+					cubeTiles.tile1 = tiles[1]
+
+					if tiles[maxTiles].name then
+						cubeTiles.tile2 = tiles[maxTiles].name
+						cubeTiles.tile3 = cubeTiles.tile2
+					end
+
+					return minetest.inventorycube(cubeTiles.tile1, cubeTiles.tile2, cubeTiles.tile3)
+
+				elseif type(tiles[maxTiles]) == "string" then
+					cubeTiles.tile1 = tiles[maxTiles]
+					cubeTiles.tile2 = tiles[maxTiles]
+					cubeTiles.tile3 = tiles[maxTiles]
+
+					if maxTiles > 1 then
+						cubeTiles.tile1 = tiles[1]
+						cubeTiles.tile3 = tiles[maxTiles-1]
+					end
+					
+					if nodeName == "bones:bones" then
+						cubeTiles.tile1 = tiles[1]
+						cubeTiles.tile2 = tiles[maxTiles]
+						cubeTiles.tile3 = tiles[3]
+					end
+
+					if foundMods.basic_machines == true and minetest.registered_items[nodeName].mod_origin == "basic_machines" then
+						cubeTiles.tile1 = tiles[1]
+						cubeTiles.tile2 = tiles[3]
+						cubeTiles.tile3 = tiles[3]
+					end
+
+					return minetest.inventorycube(cubeTiles.tile1, cubeTiles.tile2, cubeTiles.tile3)
+				else return tiles[maxTiles] end
+			else return clearImg
+			end
 		end
+	else
+		return clearImg
 	end
 end
 
@@ -123,6 +180,7 @@ minetest.register_on_joinplayer(function(player)
 	player_identifier_table[pName].name = "air"
 
 	if useDebug == true then
+		player_identifier_table[pName].dbg = "n/a"
 		player_identifier_table[pName].huddebug = player:hud_add({
 			hud_elem_type = "text",
 			position = {x=0,y=0},
@@ -231,10 +289,10 @@ minetest.register_globalstep(function(dtime)
 
 	for _,player in ipairs(minetest.get_connected_players()) do
 		--Find some better way to do this
-		local dbg = "n/a"
 
 		local pName = player:get_player_name()
 		player:hud_change(player_identifier_table[pName].clocktext, "text", cTime)
+		local dbg = player_identifier_table[pName].dbg
 
 		local look
 		local pos
@@ -279,7 +337,9 @@ minetest.register_globalstep(function(dtime)
 			node = minetest.get_node(newdir)
 			local entList = minetest.get_objects_inside_radius(newdir, 0.5)
 			foundEntity = {
+				texture = setImg,
 				found = false,
+				entity = nil,
 				isPlayer = false,
 				isMob = false,
 				name = nil,
@@ -287,7 +347,9 @@ minetest.register_globalstep(function(dtime)
 				hp = 0,
 				health = 0,
 				follow = {"n/a"},
-				tamed = false
+				owner = "n/a",
+				tamed = false,
+				protected = false
 			}
 			
 			local _,object
@@ -302,27 +364,31 @@ minetest.register_globalstep(function(dtime)
 				else
 					if object:get_luaentity() then
 						local ent = object:get_luaentity()
+						foundEntity.entity = ent
+
 						if ent.name == "__builtin:item" then
 							local entStr = string.split(ent.itemstring, " ")
 							foundEntity.name = entStr[1]
-					
-							if #entStr > 1 then
-								foundEntity.amount = entStr[2]
-							end
+							if #entStr > 1 then foundEntity.amount = entStr[2] end
 							break
+						elseif ent.name == "drawers:visual" and foundMods.drawers == true then
+							foundEntity.texture = ent.texture
+							if ent.itemName ~= nil then
+								foundEntity.name = ent.itemName
+								foundEntity.amount = ent.count
+								break
+							end
 						else
-							foundEntity.isMob = true
-							foundEntity.name = ent.name
-							if ent.follow then
-								foundEntity.follow = ent.follow
+							if foundMods.mobs == true then
+								foundEntity.isMob = true
+								foundEntity.name = ent.name
+								if ent.follow then foundEntity.follow = ent.follow end
+								if ent.owner then foundEntity.owner = ent.owner end
+								if ent.tamed then foundEntity.tamed = ent.tamed end
+								if ent.protected then foundEntity.protected = ent.protected end
+								if ent.health then foundEntity.health = ent.health end
+								break
 							end
-							if ent.tamed then
-								foundEntity.tamed = ent.tamed
-							end
-							if ent.health then
-								foundEntity.health = ent.health
-							end
-							break
 						end
 					end
 				end
@@ -330,19 +396,14 @@ minetest.register_globalstep(function(dtime)
 
 			nodeInfos = nodeInfos .. tostring(i) .. "=" .. node.name .. "\n"
 			entityInfos = entityInfos .. tostring(i) .. "\nfoundEntity:\n" .. dump(foundEntity) .. "\n---\n"
+			-- dbg = entityInfos
 
-			if foundEntity.found == true then
-				setNodeName = foundEntity.name
-				break
+			if foundEntity.found == true then setNodeName = foundEntity.name break
 			else
 				if node.name ~= "air" and node.name ~= "ignore" then
 					if node.name == "default:water_source" or node.name == "default:water_flowing" then
-						if i == 2 then
-							break
-						end
-					else
-						break
-					end
+						if i == 2 then break end
+					else break end
 				end
 			end
 		end
@@ -361,31 +422,52 @@ minetest.register_globalstep(function(dtime)
 			if setNodeName ~= oldnode then
 				player_identifier_table[pName].name = setNodeName
 
-				setImg = fillImage(setNodeName)
+				if foundEntity.found == true then setImg = foundEntity.texture
+				else
+					local tmpImg = fillImage(setNodeName)
+					setImg = tmpImg
+
+					-- if tmpImg then setImg = tmpImg end
+				end
+
+				player:hud_change(player_identifier_table[pName].hud_image, "text", setImg)
 
 				local reciepesTable = minetest.get_all_craft_recipes(setNodeName)
 				local recAmount = 0
 
-				if reciepesTable ~= nil then
-					recAmount = #reciepesTable
-				end
-
-				player:hud_change(player_identifier_table[pName].hud_image, "text", setImg)
+				if reciepesTable ~= nil then recAmount = #reciepesTable end
 
 				local getStr = setNodeName
 
 				if minetest.registered_items[setNodeName] ~= nil then
 					getStr = minetest.registered_items[setNodeName].description
+					if minetest.registered_items[setNodeName].tiles then
+						local maxTiles = #minetest.registered_items[setNodeName].tiles
+						dbg = setNodeName .. " tiles " .. maxTiles .. " (" .. type(minetest.registered_items[setNodeName].tiles[maxTiles]) .. "):\n" .. dump(minetest.registered_items[setNodeName].tiles)
+					end
 				end
 
 				text_title = getStr
 				text_description = " "
 
-				local checkStr = " - "
+				local checkStr = " "
 
-				if string.find(getStr, checkStr) then
-					text_title = string.split(getStr, checkStr)[1]
-					text_description = string.split(getStr, checkStr)[2]
+				if foundMods.pipeworks == true then
+					checkStr = " {"
+					if string.find(getStr, checkStr) then
+						getStr = string.split(getStr, checkStr)[1]
+						-- text_title = string.split(getStr, checkStr)[1]
+						-- text_description = string.split(getStr, checkStr)[2]
+					end
+				end
+
+				if foundMods.basic_machines == true then
+					checkStr = " - "
+
+					if string.find(getStr, checkStr) then
+						text_title = string.split(getStr, checkStr)[1]
+						text_description = string.split(getStr, checkStr)[2]
+					end
 				end
 
 				checkStr = ": "
@@ -395,14 +477,15 @@ minetest.register_globalstep(function(dtime)
 					text_description = string.split(getStr, checkStr)[2]
 				end
 
-				text_description = splittedString(text_description, 50)
+				text_description = splittedString(text_description)
 
 				if foundEntity.found == true then
 					text_title = text_title .. " x" .. tostring(foundEntity.amount)
 
 					if foundEntity.isMob == true then
-						text_description = "HP: " .. tostring(foundEntity.health) .. "/" .. tostring(foundEntity.hp) .. " | "
-						text_description = text_description .. "tamed: " .. tostring(foundEntity.tamed) .. "\n"
+						text_description = "HP: " .. tostring(foundEntity.health) .. "/" .. tostring(foundEntity.hp)
+						text_description = text_description .. " | tamed: " .. tostring(foundEntity.tamed)  .. " | protected: " .. tostring(foundEntity.protected) .. "\n"
+						text_description = text_description .. "Owner: " .. foundEntity.owner .. "\n"
 
 						local followStr= ""
 						if type(foundEntity.follow) == "string" then
@@ -411,16 +494,18 @@ minetest.register_globalstep(function(dtime)
 							followStr = table.concat(foundEntity.follow, ", ")
 						end
 
-						text_description = text_description .. "follow: " .. splittedString(followStr, 50)
+						text_description = text_description .. "follow: " .. splittedString(followStr)
 					end
+					-- dbg = dbg .. "\nfoundEntity:\n" .. dump(foundEntity)
 				end
+				-- dbg = dbg .. "\nfoundEntity:\n" .. dump(foundEntity)
 
 				text_title = text_title .. " | Reciepes: " .. tostring(recAmount)
 			end
 		end
 
 		if minetest.registered_items[setNodeName] ~= nil and setNodeName ~= "air" then
-			setMod = minetest.registered_items[setNodeName].mod_origin
+			local setMod = minetest.registered_items[setNodeName].mod_origin
 			text_modInfo = "Mod: " .. setMod .. "\n --> " .. setNodeName
 		end
 
@@ -430,13 +515,14 @@ minetest.register_globalstep(function(dtime)
 		player:hud_change(player_identifier_table[pName].hud_title, "text", text_title)
 		player:hud_change(player_identifier_table[pName].hud_modinfo, "text", text_modInfo)
 		player:hud_change(player_identifier_table[pName].hud_description, "text", text_description)
-
+		
 		if useDebug == true then
+			player_identifier_table[pName].dbg = dbg
 			player:hud_change(player_identifier_table[pName].huddebug, "text", "DEBUG:\n" .. dbg)
 		end
 	end
 end)
 
 if minetest.settings:get("log_mods") then
-	minetest.log("action", "[Mod] " .. versionStr .. " loaded")
+	minetest.log("action", "[Mod] " .. version .. " loaded")
 end
