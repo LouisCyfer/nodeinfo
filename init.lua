@@ -1,4 +1,4 @@
-local version = minetest.get_current_modname() .. " v0.6"
+local version = minetest.get_current_modname() .. " v0.6.1"
 
 player_identifier_table = {}
 local clearImg = "bg.png"
@@ -99,7 +99,7 @@ end
 function fillImage(nodeName)
 
 	if minetest.registered_items[nodeName] == nil then
-		return clearImg
+		return minetest.inventorycube(clearImg, clearImg, clearImg)
 	end
 
 	local tiles = minetest.registered_items[nodeName].inventory_image
@@ -161,11 +161,11 @@ function fillImage(nodeName)
 
 					return minetest.inventorycube(cubeTiles.tile1, cubeTiles.tile2, cubeTiles.tile3)
 				else return tiles[maxTiles] end
-			else return clearImg
+			else return minetest.inventorycube(clearImg, clearImg, clearImg)
 			end
 		end
 	else
-		return clearImg
+		return minetest.inventorycube(clearImg, clearImg, clearImg)
 	end
 end
 
@@ -178,6 +178,7 @@ minetest.register_on_joinplayer(function(player)
 	end
 
 	player_identifier_table[pName].name = "air"
+	player_identifier_table[pName].amount = 1
 
 	if useDebug == true then
 		player_identifier_table[pName].dbg = "n/a"
@@ -276,7 +277,7 @@ end)
 minetest.register_globalstep(function(dtime)
 	timer = timer + dtime
 
-	if timer >= 0.2 then
+	if timer >= 0.1 then
 
 		cTime = getTimeString()
 		if cTime == nil then
@@ -292,7 +293,8 @@ minetest.register_globalstep(function(dtime)
 
 		local pName = player:get_player_name()
 		player:hud_change(player_identifier_table[pName].clocktext, "text", cTime)
-		local dbg = player_identifier_table[pName].dbg
+
+		if useDebug == true then local dbg = player_identifier_table[pName].dbg end
 
 		local look
 		local pos
@@ -302,16 +304,19 @@ minetest.register_globalstep(function(dtime)
 
 		local node = nil
 		local oldnode
+		local oldamount
 		local setNodeName = "air"
 
 		local text_title = "air"
 		local text_modInfo = ""
 		local text_description = ""
 
-		local setImg = clearImg
+		local setImg = minetest.inventorycube(clearImg, clearImg, clearImg)
 		local tiles
 
 		oldnode = player_identifier_table[pName].name
+		oldamount = player_identifier_table[pName].amount
+
 		newdir   = {}
 		newlook  = {}
 		distance = 3
@@ -343,7 +348,9 @@ minetest.register_globalstep(function(dtime)
 				isPlayer = false,
 				isMob = false,
 				name = nil,
+				orgName = "",
 				amount = 1,
+				maxAmount = 1,
 				hp = 0,
 				health = 0,
 				follow = {"n/a"},
@@ -369,15 +376,24 @@ minetest.register_globalstep(function(dtime)
 						if ent.name == "__builtin:item" then
 							local entStr = string.split(ent.itemstring, " ")
 							foundEntity.name = entStr[1]
-							if #entStr > 1 then foundEntity.amount = entStr[2] end
+							if #entStr > 1 then
+								foundEntity.amount = entStr[2]
+								foundEntity.maxAmount = foundEntity.amount
+							end
 							break
 						elseif ent.name == "drawers:visual" and foundMods.drawers == true then
 							foundEntity.texture = ent.texture
+							foundEntity.orgName = ent.name
+
 							if ent.itemName ~= nil then
 								foundEntity.name = ent.itemName
 								foundEntity.amount = ent.count
-								break
+								foundEntity.maxAmount = ent.maxCount
 							end
+
+							if foundEntity.name == "" then foundEntity.name = ent.name end
+
+							break
 						else
 							if foundMods.mobs == true then
 								foundEntity.isMob = true
@@ -419,8 +435,9 @@ minetest.register_globalstep(function(dtime)
 			text_modInfo = player:hud_get(player_identifier_table[pName].hud_modinfo)["text"]
 			text_description = player:hud_get(player_identifier_table[pName].hud_description)["text"]
 
-			if setNodeName ~= oldnode then
+			if setNodeName ~= oldnode or foundEntity.amount ~= oldamount then
 				player_identifier_table[pName].name = setNodeName
+				player_identifier_table[pName].amount = foundEntity.amount
 
 				if foundEntity.found == true then setImg = foundEntity.texture
 				else
@@ -439,11 +456,19 @@ minetest.register_globalstep(function(dtime)
 
 				local getStr = setNodeName
 
+				if useDebug == true then
+					-- dbg = dbg .. "\n\nfoundEntity=\n" .. dump(foundEntity) .. "\n"
+					dbg = dump(minetest.registered_entities[foundEntity.orgName])
+					dbg = "setNodeName=" .. setNodeName .. "\n\n" .. dbg
+				end
+
 				if minetest.registered_items[setNodeName] ~= nil then
 					getStr = minetest.registered_items[setNodeName].description
 					if minetest.registered_items[setNodeName].tiles then
 						local maxTiles = #minetest.registered_items[setNodeName].tiles
-						dbg = setNodeName .. " tiles " .. maxTiles .. " (" .. type(minetest.registered_items[setNodeName].tiles[maxTiles]) .. "):\n" .. dump(minetest.registered_items[setNodeName].tiles)
+						if useDebug == true then
+							dbg = dbg .. "\n" .. " tiles " .. maxTiles .. " (" .. type(minetest.registered_items[setNodeName].tiles[maxTiles]) .. "):\n" .. dump(minetest.registered_items[setNodeName].tiles)
+						end
 					end
 				end
 
@@ -495,8 +520,13 @@ minetest.register_globalstep(function(dtime)
 						end
 
 						text_description = text_description .. "follow: " .. splittedString(followStr)
+
+					elseif foundEntity.orgName == "drawers:visual" and foundMods.drawers == true then
+						local getPercent = math.floor(((foundEntity.amount / foundEntity.maxAmount) * 100) + 0.5)
+
+						text_description = "[drawer-info] " .. foundEntity.amount .. "/" .. foundEntity.maxAmount .. " (" .. getPercent .. "% filled)" .. "\n\n" .. text_description
 					end
-					-- dbg = dbg .. "\nfoundEntity:\n" .. dump(foundEntity)
+					-- dbg = dbg .. "\nfoundEntity:\n" .. dump(foundEntity.entity)
 				end
 				-- dbg = dbg .. "\nfoundEntity:\n" .. dump(foundEntity)
 
@@ -504,8 +534,18 @@ minetest.register_globalstep(function(dtime)
 			end
 		end
 
-		if minetest.registered_items[setNodeName] ~= nil and setNodeName ~= "air" then
-			local setMod = minetest.registered_items[setNodeName].mod_origin
+		if setNodeName ~= "air"then
+			local setMod = "n/a"
+
+			if minetest.registered_items[setNodeName] ~= nil then
+				setMod = minetest.registered_items[setNodeName].mod_origin
+			elseif minetest.registered_entities[setNodeName] ~= nil then
+
+				if foundMods.drawers == true and setNodeName == "drawers:visual" then
+					setMod = minetest.registered_entities[setNodeName].mod_origin
+				end
+			end
+
 			text_modInfo = "Mod: " .. setMod .. "\n --> " .. setNodeName
 		end
 
